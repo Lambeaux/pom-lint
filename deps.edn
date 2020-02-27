@@ -2,6 +2,7 @@
            "src/test/clojure"
            "src/test/resources"]
  :deps    {org.clojure/clojure {:mvn/version "1.10.1"}}
+           ;org.clojure/data.xml {:mvn/version "0.0.8"}}
  :aliases {:test {:extra-deps {cloverage {:mvn/version "1.1.2"}}
                   :main-opts  ["-m" "cloverage.coverage"
                                "--fail-threshold" "20"
