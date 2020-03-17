@@ -88,7 +88,10 @@
   [root-project-path]
   (let [is-valid-feature-source?
         ; Note that shifting to use the src version might include 'feature.xml', singular.
-        #(and (= (.getName %) "features.xml"), (.contains (.getParent %) "/target/classes"))]
+        #(and
+           (= (.getName %) "features.xml")
+           (or (.contains (.getAbsolutePath %) "/target/features")
+               (.contains (.getParent %) "/target/classes")))]
     (->> root-project-path
          io/file
          file-seq
@@ -130,6 +133,8 @@
        (map xml-string-clean)))
 
 (defn- get-feature-defs
+  ;; Todo! Potentially add support for <conditional> blocks
+  ;; Todo! How many artifacts appear inside a <conditional> block throughout all repos?
   "Returns features mapped to a coll of their dependencies, which can be other features or
   bundles:
 
@@ -266,8 +271,52 @@
 ;; What composition of the above functions might look like.
 
 (comment
+  "Manually specify the layer to flatten."
+  ; -- grab the layer to use as a template
+  (->> "/cx/repos/codice/ddf/features/install-profiles/target/classes/features.xml"
+       xml-parse
+       (xml->layered-feature "profile-standard"))
+  ; -- modify the layer data to include the missing jetty bundle
+  (let [jetty-bundles
+        ["mvn:org.eclipse.jetty.websocket/websocket-server/9.4.18.v20190429"
+         "mvn:org.eclipse.jetty.websocket/websocket-client/9.4.18.v20190429"
+         "mvn:org.eclipse.jetty.websocket/websocket-common/9.4.18.v20190429"
+         "mvn:org.eclipse.jetty.websocket/websocket-servlet/9.4.18.v20190429"
+         "mvn:org.eclipse.jetty.websocket/websocket-api/9.4.18.v20190429"
+         "mvn:org.eclipse.jetty.websocket/javax-websocket-server-impl/9.4.18.v20190429"
+         "mvn:org.eclipse.jetty.websocket/javax-websocket-client-impl/9.4.18.v20190429"
+         "mvn:javax.websocket/javax.websocket-api/1.1"]
+        tree
+        {"profile-standard"    '("ddf-boot-features"
+                                  "catalog-app"
+                                  "search-ui-app"
+                                  "solr-app"
+                                  "spatial-app")
+         "profile-minimum"     '()
+         "profile-development" '("profile-standard"
+                                  "resourcemanagement-app"
+                                  "registry-app")}
+        layer
+        {:repo-locations    '("mvn:ddf.features/apps/2.19.4/xml/features")
+         :repos-processed   #{}
+         :feature-tree      tree
+         :root-feature-name "profile-standard"
+         :children          `("ddf-boot-features"
+                               ~@jetty-bundles
+                               "catalog-app"
+                               "search-ui-app"
+                               "solr-app"
+                               "spatial-app")}]
+    (->> layer
+         flatten-feature
+         layered-feature->xml
+         (xml-write "/cx/deploy/ddf-2.19.4/features-flat.xml"))))
+
+(comment
   "Locate all processed feature files for DDF."
-  (get-all-feature-files "/cx/repos/codice/ddf"))
+  (->> "/cx/repos/codice/ddf"
+       (get-all-feature-files)
+       (map #(.substring % 21))))
 
 (comment
   "Note that the feature:repo-add Karaf command takes a URI, not a path or URL."
